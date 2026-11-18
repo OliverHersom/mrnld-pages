@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Infinite Draggable Grid</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+    }
+
+    .infinite-grid {
+      touch-action: none;
+      width: 100%;
+      height: 100svh;
+      position: relative;
+      overflow: clip;
+      cursor: grab;
+      transition: opacity 0.5s ease;
+      opacity: 1;
+    }
+
+    .infinite-grid[data-infinite-grid-status="loading"] {
+      opacity: 0;
+    }
+
+    .infinite-grid[data-infinite-grid-status="dragging"] {
+      cursor: grabbing;
+    }
+
+    .infinite-grid__collection {
+      will-change: transform;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+    }
+
+    .infinite-grid__list {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .infinite-grid__item {
+      aspect-ratio: 1;
+      will-change: transform;
+      backface-visibility: hidden;
+      justify-content: center;
+      align-items: center;
+      width: 13em;
+      padding: 2.25em;
+      font-size: clamp(1.5em, 2vw, 3em);
+      display: flex;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .infinite-grid__card {
+      -webkit-user-select: none;
+      user-select: none;
+      will-change: transform;
+      backface-visibility: hidden;
+      border-radius: .125em;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .infinite-grid__card-img {
+      pointer-events: none;
+      object-fit: cover;
+      border-radius: inherit;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+    }
+
+    /* ---------- Hover-Titel ---------- */
+    body {
+      font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+      font-weight: 400;
+      font-synthesis: none;
+      color: #111;
+      background: #fff;
+    }
+
+    .infinite-grid__card {
+      cursor: pointer;
+    }
+
+    .infinite-grid[data-infinite-grid-status="dragging"] .infinite-grid__card {
+      cursor: grabbing;
+    }
+
+    .infinite-grid__card-title {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      gap: .2em;
+      padding: 4em 1em 1em;
+      font-size: clamp(.85rem, .9vw, 1.05rem);
+      line-height: 1.15;
+      color: #fff;
+      border-radius: inherit;
+      background: linear-gradient(to top, rgba(0, 0, 0, .7), rgba(0, 0, 0, 0));
+      opacity: 0;
+      transform: translateY(.4em);
+      transition: opacity .3s ease, transform .3s ease;
+      pointer-events: none;
+    }
+
+    .infinite-grid__card-title span {
+      font-size: 1.9em;
+      font-weight: 500;
+      letter-spacing: -.02em;
+      line-height: 1.05;
+      transform: translateY(.5em);
+      transition: transform .5s cubic-bezier(.22, 1, .36, 1);
+    }
+
+    .infinite-grid__card-title small {
+      font-size: .75em;
+      opacity: .8;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      transform: translateY(.8em);
+      transition: transform .5s cubic-bezier(.22, 1, .36, 1) .05s;
+    }
+
+    @media (hover: hover) {
+      .infinite-grid[data-infinite-grid-status="idle"] .infinite-grid__card:hover .infinite-grid__card-title {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .infinite-grid[data-infinite-grid-status="idle"] .infinite-grid__card:hover .infinite-grid__card-title span,
+      .infinite-grid[data-infinite-grid-status="idle"] .infinite-grid__card:hover .infinite-grid__card-title small {
+        transform: translateY(0);
+      }
+    }
+
+    /* ---------- Case-Study-Modal ---------- */
+    .case-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .case-modal[data-case-modal-status="open"] {
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    .case-modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 10, 10, .55);
+      backdrop-filter: blur(8px);
+      opacity: 0;
+    }
+
+    .case-modal__panel {
+      position: relative;
+      width: min(1100px, 100%);
+      height: calc(100svh - 2rem);
+      background: #fff;
+      border-radius: 14px 14px 0 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      will-change: transform;
+    }
+
+    .case-modal__title .word {
+      display: inline-block;
+      overflow: hidden;
+      vertical-align: top;
+      padding-bottom: .08em;
+      margin-bottom: -.08em;
+    }
+
+    .case-modal__title .word > span {
+      display: inline-block;
+      will-change: transform;
+    }
+
+    .case-modal__hero-wrap {
+      overflow: hidden;
+      border-radius: 8px;
+    }
+
+    .case-modal__close {
+      position: sticky;
+      top: 1rem;
+      float: right;
+      margin: 1rem 1rem 0 0;
+      z-index: 2;
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: 50%;
+      background: #111;
+      color: #fff;
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .case-modal__content {
+      padding: clamp(1.5rem, 5vw, 4rem);
+      padding-top: clamp(2rem, 5vw, 4rem);
+    }
+
+    .case-modal__eyebrow {
+      margin: 0 0 .75rem;
+      font-size: .8rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: #777;
+    }
+
+    .case-modal__title {
+      margin: 0 0 2rem;
+      font-size: clamp(2.2rem, 6vw, 4.5rem);
+      line-height: 1;
+      letter-spacing: -.02em;
+      font-weight: 500;
+    }
+
+    .case-modal__hero {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      border-radius: 8px;
+      display: block;
+      background: #eee;
+    }
+
+    .case-modal__meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1.5rem;
+      margin: 2.5rem 0;
+      padding: 1.5rem 0;
+      border-top: 1px solid #e5e5e5;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .case-modal__meta dt {
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #888;
+      margin-bottom: .35rem;
+    }
+
+    .case-modal__meta dd {
+      margin: 0;
+      font-weight: 500;
+    }
+
+    .case-modal__section {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 2rem;
+      margin: 3rem 0;
+    }
+
+    .case-modal__section h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+
+    .case-modal__section p {
+      margin: 0 0 1rem;
+      line-height: 1.65;
+      color: #444;
+    }
+
+    .case-modal__gallery {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 3rem 0;
+    }
+
+    .case-modal__placeholder {
+      aspect-ratio: 4 / 3;
+      border-radius: 8px;
+      background: #efefef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      font-size: .85rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .case-modal__placeholder--wide {
+      grid-column: 1 / -1;
+      aspect-ratio: 21 / 9;
+    }
+
+    @media (max-width: 700px) {
+      .case-modal__section,
+      .case-modal__gallery {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<section data-infinite-grid-status="loading" data-infinite-grid-init="" class="infinite-grid">
+  <div data-infinite-grid-collection="" class="infinite-grid__collection">
+    <div data-infinite-grid-list="" class="infinite-grid__list">
+      <!-- Projektdaten: data-project-title / -category / -client / -year pro Item anpassen -->
+      <div data-infinite-grid-item="" data-project-title="Run Campaign" data-project-category="Kampagne" data-project-client="John Lewis" data-project-year="2024" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/01.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Run Campaign</span><small>Kampagne</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Gameday UK" data-project-category="Key Visual" data-project-client="eGym" data-project-year="2024" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/02.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Gameday UK</span><small>Key Visual</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Aira Launch" data-project-category="Brand Campaign" data-project-client="Aira" data-project-year="2025" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/03.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Aira Launch</span><small>Brand Campaign</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Aira Home" data-project-category="Lifestyle" data-project-client="Aira" data-project-year="2025" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/04.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Aira Home</span><small>Lifestyle</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Aira Product" data-project-category="Produktfotografie" data-project-client="Aira" data-project-year="2025" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/05.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Aira Product</span><small>Produktfotografie</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Aira Details" data-project-category="Art Direction" data-project-client="Aira" data-project-year="2025" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/06.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Aira Details</span><small>Art Direction</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="L+B 2018" data-project-category="Messeauftritt" data-project-client="Light + Building" data-project-year="2018" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/07.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>L+B 2018</span><small>Messeauftritt</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Headphones Hero" data-project-category="Product Visual" data-project-client="Kunde XY" data-project-year="2025" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/08.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Headphones Hero</span><small>Product Visual</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Headphones Lifestyle" data-project-category="KI-Visual" data-project-client="Kunde XY" data-project-year="2025" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/09.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Headphones Lifestyle</span><small>KI-Visual</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Homevolt" data-project-category="Produktkampagne" data-project-client="Homevolt" data-project-year="2024" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/10.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Homevolt</span><small>Produktkampagne</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Gameday US" data-project-category="Key Visual" data-project-client="eGym" data-project-year="2024" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/11.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Gameday US</span><small>Key Visual</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Shop1st" data-project-category="E-Commerce" data-project-client="Shop1st" data-project-year="2023" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/12.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Shop1st</span><small>E-Commerce</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Sports Line" data-project-category="Web Header" data-project-client="Kunde XY" data-project-year="2023" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/13.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Sports Line</span><small>Web Header</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Title Page" data-project-category="Editorial" data-project-client="Kunde XY" data-project-year="2024" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/14.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Title Page</span><small>Editorial</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Urbanite Nation" data-project-category="Lifestyle Shooting" data-project-client="Urbanite" data-project-year="2024" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/15.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Urbanite Nation</span><small>Lifestyle Shooting</small></div></div></div>
+      <div data-infinite-grid-item="" data-project-title="Concept Visual" data-project-category="KI-Composing" data-project-client="Kunde XY" data-project-year="2025" class="infinite-grid__item"><div data-infinite-grid-card="" class="infinite-grid__card"><img src="images/16.jpg" loading="lazy" alt="" class="infinite-grid__card-img"><div class="infinite-grid__card-title"><span>Concept Visual</span><small>KI-Composing</small></div></div></div>
+    </div>
+  </div>
+</section>
+
+<div class="case-modal" data-case-modal="" data-case-modal-status="closed" role="dialog" aria-modal="true" aria-labelledby="case-modal-title" aria-hidden="true">
+  <div class="case-modal__backdrop" data-case-modal-close=""></div>
+  <article class="case-modal__panel">
+    <button type="button" class="case-modal__close" data-case-modal-close="" aria-label="Schließen">&times;</button>
+    <div class="case-modal__content">
+      <p class="case-modal__eyebrow" data-case-field="category">Kategorie</p>
+      <h2 class="case-modal__title" id="case-modal-title" data-case-field="title">Projekttitel</h2>
+      <div class="case-modal__hero-wrap" data-case-reveal=""><img class="case-modal__hero" data-case-field="image" src="" alt=""></div>
+
+      <dl class="case-modal__meta">
+        <div><dt>Kunde</dt><dd data-case-field="client">Kunde</dd></div>
+        <div><dt>Jahr</dt><dd data-case-field="year">2025</dd></div>
+        <div><dt>Leistungen</dt><dd>Konzept, Art Direction, Design</dd></div>
+        <div><dt>Team</dt><dd>Platzhalter Name, Platzhalter Name</dd></div>
+      </dl>
+
+      <section class="case-modal__section">
+        <h3>Herausforderung</h3>
+        <div>
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+          <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident.</p>
+        </div>
+      </section>
+
+      <div class="case-modal__gallery">
+        <div class="case-modal__placeholder">Bild-Platzhalter</div>
+        <div class="case-modal__placeholder">Bild-Platzhalter</div>
+        <div class="case-modal__placeholder case-modal__placeholder--wide">Video / Bild-Platzhalter</div>
+      </div>
+
+      <section class="case-modal__section">
+        <h3>Lösung</h3>
+        <div>
+          <p>Curabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris. Integer in mauris eu nibh euismod gravida.</p>
+          <p>Praesent dapibus, neque id cursus faucibus, tortor neque egestas augue, eu vulputate magna eros eu erat. Aliquam erat volutpat. Nam dui mi, tincidunt quis, accumsan porttitor, facilisis luctus, metus.</p>
+        </div>
+      </section>
+
+      <section class="case-modal__section">
+        <h3>Ergebnis</h3>
+        <div>
+          <p>Phasellus ultrices nulla quis nibh. Quisque a lectus. Donec consectetuer ligula vulputate sem tristique cursus. Nam nulla quam, gravida non, commodo a, sodales sit amet, nisi.</p>
+        </div>
+      </section>
+
+      <div class="case-modal__gallery">
+        <div class="case-modal__placeholder">Bild-Platzhalter</div>
+        <div class="case-modal__placeholder">Bild-Platzhalter</div>
+      </div>
+    </div>
+  </article>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15/dist/Observer.min.js"></script>
+<script>
+gsap.registerPlugin(Observer);
+
+function initInfiniteCardsGrid() {
+  const wrappers = document.querySelectorAll('[data-infinite-grid-init]');
+
+  const wheelSpeed = 0.6; // wheel/trackpad speed
+  const dragSpeed = 1.2; // drag speed
+  const gridOverscan = 1; // extra rows and columns generated outside the viewport
+  const startOffsetY = 0.33; // vertical offset between columns
+  const positionLerp = 0.05; // movement smoothing amount
+  const xToYInfluence = 0.2; // horizontal movement influence on vertical movement
+  const columnSpeedPattern = [1, 1, 0.9]; // column parallax speed pattern
+  const minCardScale = 0.5; // minimum card scale while moving
+  const scaleLerp = 0.02; // scale animation smoothing amount
+
+  wrappers.forEach((wrapper) => {
+    const collection = wrapper.querySelector('[data-infinite-grid-collection]');
+    const sourceList = wrapper.querySelector('[data-infinite-grid-list]');
+    const originalItems = Array.from(sourceList.querySelectorAll('[data-infinite-grid-item]')).map((item) => item.cloneNode(true));
+
+    if (!collection || !sourceList || !originalItems.length) return;
+
+    let observer;
+    let cards = [];
+    let cardElements = [];
+    const timers = {};
+    const size = {};
+    const pos = {};
+    const scale = {current: 1, target: 1};
+
+    function setStatus(status) {
+      wrapper.setAttribute('data-infinite-grid-status', status);
+    }
+
+    function wrapValue(value, size) {
+      return ((value % size) + size) % size;
+    }
+
+    function createColumnSpeeds(columns) {
+      return Array.from({length: columns}, (_, i) => columnSpeedPattern[i % columnSpeedPattern.length]);
+    }
+
+    function createItemIndexes(columns, rows) {
+      const total = originalItems.length;
+      const indexes = Array.from({length: rows}, () => []);
+      const used = Array(total).fill(0);
+      const centerColumn = Math.floor(columns / 2);
+      const centerRow = Math.floor(rows / 2);
+      const cells = [];
+
+      for (let row = 0; row < rows; row++) {
+        for (let column = 0; column < columns; column++) {
+          cells.push({
+            row,
+            column,
+            distance: Math.abs(row - centerRow) + Math.abs(column - centerColumn)
+          });
+        }
+      }
+
+      cells.sort((a, b) => a.distance - b.distance);
+
+      cells.forEach(({row, column}) => {
+        const blocked = [
+          indexes[row][column - 1],
+          indexes[row][column + 1],
+          row > 0 ? indexes[row - 1][column] : undefined,
+          row < rows - 1 ? indexes[row + 1][column] : undefined,
+          row > 0 ? indexes[row - 1][column - 1] : undefined,
+          row > 0 ? indexes[row - 1][column + 1] : undefined,
+          row < rows - 1 ? indexes[row + 1][column - 1] : undefined,
+          row < rows - 1 ? indexes[row + 1][column + 1] : undefined
+        ];
+
+        const seed = (row * 17 + column * 31) % total;
+        let bestIndex = 0;
+        let bestScore = Infinity;
+
+        for (let i = 0; i < total; i++) {
+          const itemIndex = (i + seed) % total;
+          let score = used[itemIndex] * 10 + Math.abs(itemIndex - seed) * 0.01;
+
+          if (total > 1 && blocked.includes(itemIndex)) score += 1000;
+
+          if (score < bestScore) {
+            bestScore = score;
+            bestIndex = itemIndex;
+          }
+        }
+
+        indexes[row][column] = bestIndex;
+        used[bestIndex]++;
+      });
+
+      return indexes;
+    }
+
+    function buildGrid() {
+      if (observer) observer.kill();
+      clearTimeout(timers.resize);
+      clearTimeout(timers.scroll);
+      clearTimeout(timers.scale);
+      gsap.ticker.remove(updateGrid);
+
+      setStatus('loading');
+      sourceList.innerHTML = '';
+
+      const measureItem = originalItems[0].cloneNode(true);
+      measureItem.style.position = 'absolute';
+      measureItem.style.visibility = 'hidden';
+      measureItem.style.pointerEvents = 'none';
+      wrapper.appendChild(measureItem);
+
+      const rect = measureItem.getBoundingClientRect();
+      size.itemW = rect.width;
+      size.itemH = rect.height;
+      measureItem.remove();
+
+      if (!size.itemW || !size.itemH) return;
+
+      const columns = Math.max(1, Math.ceil(wrapper.clientWidth / size.itemW) + gridOverscan * 2);
+      const rows = Math.max(Math.ceil(wrapper.clientHeight / size.itemH) + gridOverscan * 2, Math.ceil(originalItems.length / columns));
+      const itemIndexes = createItemIndexes(columns, rows);
+      const columnSpeeds = createColumnSpeeds(columns);
+      const fragment = document.createDocumentFragment();
+      const centerColumn = Math.floor(columns / 2);
+      const centerRow = Math.floor(rows / 2);
+
+      size.totalW = columns * size.itemW;
+      size.totalH = rows * size.itemH;
+      cards = [];
+      cardElements = [];
+
+      gsap.set(collection, {x: 0, y: 0, force3D: true});
+
+      collection.style.width = `${size.totalW}px`;
+      collection.style.height = `${size.totalH}px`;
+
+      for (let row = 0; row < rows; row++) {
+        for (let column = 0; column < columns; column++) {
+          const item = originalItems[itemIndexes[row][column]].cloneNode(true);
+          const card = item.querySelector('[data-infinite-grid-card]');
+
+          cards.push({
+            baseX: column * size.itemW,
+            baseY: row * size.itemH,
+            startY: (column - centerColumn) * size.itemH * startOffsetY,
+            ySpeed: columnSpeeds[column],
+            xSetter: gsap.quickSetter(item, 'x', 'px'),
+            ySetter: gsap.quickSetter(item, 'y', 'px')
+          });
+
+          if (card) cardElements.push(card);
+          if (cards.length > originalItems.length) item.setAttribute('aria-hidden', 'true');
+
+          fragment.appendChild(item);
+        }
+      }
+
+      sourceList.appendChild(fragment);
+
+      gsap.set(cardElements, {
+        force3D: true
+      });
+
+      pos.startX = wrapper.clientWidth * 0.5 - centerColumn * size.itemW - size.itemW * 0.5;
+      pos.startY = wrapper.clientHeight * 0.5 - centerRow * size.itemH - size.itemH * 0.5;
+      pos.x = pos.startX;
+      pos.y = pos.startY;
+      pos.targetX = pos.x;
+      pos.targetY = pos.y;
+      scale.current = 1;
+      scale.target = 1;
+
+      updateGrid();
+      gsap.ticker.add(updateGrid);
+
+      requestAnimationFrame(() => {
+        setStatus('idle');
+      });
+
+      observer = Observer.create({
+        target: wrapper,
+        type: 'wheel,touch,pointer',
+        preventDefault: true,
+        dragMinimum: 3,
+        onPress() { setStatus('dragging'); },
+        onRelease() { setStatus('idle'); },
+        onStop() { setStatus('idle'); },
+        onChange: handleMovement
+      });
+    }
+
+    function updateGrid() {
+      pos.x += (pos.targetX - pos.x) * positionLerp;
+      pos.y += (pos.targetY - pos.y) * positionLerp;
+      scale.current += (scale.target - scale.current) * scaleLerp;
+
+      const offsetX = size.itemW * gridOverscan;
+      const offsetY = size.itemH * gridOverscan;
+      const scrollY = pos.y - pos.startY;
+
+      cards.forEach(({baseX, baseY, startY, ySpeed, xSetter, ySetter}) => {
+        xSetter(wrapValue(baseX + pos.x + offsetX, size.totalW) - offsetX);
+        ySetter(wrapValue(baseY + pos.startY + startY + scrollY * ySpeed + offsetY, size.totalH) - offsetY);
+      });
+
+      gsap.set(cardElements, {scale: scale.current});
+    }
+
+    function handleMovement(self) {
+      const isWheel = self.event.type === 'wheel';
+      const speed = isWheel ? wheelSpeed : dragSpeed;
+      const deltaX = gsap.utils.clamp(-80, 80, self.deltaX * speed);
+      const deltaY = gsap.utils.clamp(-80, 80, self.deltaY * speed);
+      const moveX = isWheel ? -deltaX : deltaX;
+      const moveY = isWheel ? -deltaY : deltaY;
+      const strength = gsap.utils.clamp(0, 1, Math.max(Math.abs(deltaX), Math.abs(deltaY)) / 80);
+
+      if (isWheel) {
+        setStatus('scrolling');
+
+        clearTimeout(timers.scroll);
+        timers.scroll = setTimeout(() => {
+          setStatus('idle');
+        }, 200);
+      }
+
+      scale.target = gsap.utils.interpolate(1, minCardScale, strength);
+
+      clearTimeout(timers.scale);
+      timers.scale = setTimeout(() => {
+        scale.target = 1;
+      }, 120);
+
+      pos.targetX += moveX;
+      pos.targetY += moveY + moveX * xToYInfluence;
+    }
+
+    function handleMouseLeave() {
+      setStatus('idle');
+      scale.target = 1;
+
+      if (observer) {
+        observer.disable();
+        observer.enable();
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      clearTimeout(timers.resize);
+      timers.resize = setTimeout(buildGrid, 200);
+    });
+
+    document.documentElement.addEventListener('mouseleave', handleMouseLeave);
+
+    buildGrid();
+  });
+}
+
+// Initialize Infinite Cards Grid (Masonary)
+document.addEventListener('DOMContentLoaded', () => {
+  initInfiniteCardsGrid();
+});
+</script>
+
+<script>
+// Case-Study-Modal: öffnet bei Klick (nicht bei Drag) auf eine Karte
+function initCaseModal() {
+  const grid = document.querySelector('[data-infinite-grid-init]');
+  const modal = document.querySelector('[data-case-modal]');
+  if (!grid || !modal) return;
+
+  const clickTolerance = 6; // px Bewegung, ab der es als Drag zählt
+  const fields = modal.querySelectorAll('[data-case-field]');
+  const panel = modal.querySelector('.case-modal__panel');
+  const closeBtn = modal.querySelector('.case-modal__close');
+  const backdrop = modal.querySelector('.case-modal__backdrop');
+  let down = null;
+  let lastFocus = null;
+  let isOpen = false;
+  let tl;
+
+  gsap.set(panel, {yPercent: 100});
+
+  grid.addEventListener('pointerdown', (e) => {
+    down = {x: e.clientX, y: e.clientY};
+  });
+
+  window.addEventListener('pointerup', (e) => {
+    if (!down) return;
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+    down = null;
+    if (moved > clickTolerance) return;
+
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    const card = hit && hit.closest('[data-infinite-grid-card]');
+    const item = card && card.closest('[data-infinite-grid-item]');
+    if (item) openModal(item);
+  });
+
+  function openModal(item) {
+    const img = item.querySelector('img');
+    const data = {
+      title: item.dataset.projectTitle || 'Projekttitel',
+      category: item.dataset.projectCategory || 'Kategorie',
+      client: item.dataset.projectClient || 'Kunde',
+      year: item.dataset.projectYear || '—'
+    };
+
+    fields.forEach((el) => {
+      const key = el.dataset.caseField;
+      if (key === 'image') {
+        el.src = img ? img.src : '';
+        el.alt = data.title;
+      } else if (key === 'title') {
+        // Titel in Wörter splitten für den Masken-Reveal
+        el.setAttribute('aria-label', data.title);
+        el.innerHTML = data.title
+          .split(' ')
+          .map((w) => `<span class="word" aria-hidden="true"><span>${w}</span></span>`)
+          .join(' ');
+      } else {
+        el.textContent = data[key];
+      }
+    });
+
+    lastFocus = document.activeElement;
+    panel.scrollTop = 0;
+    modal.setAttribute('data-case-modal-status', 'open');
+    modal.setAttribute('aria-hidden', 'false');
+    isOpen = true;
+
+    const content = getStaggerTargets();
+    const words = modal.querySelectorAll('.case-modal__title .word > span');
+    const hero = modal.querySelector('.case-modal__hero');
+
+    if (tl) tl.kill();
+    tl = gsap.timeline({defaults: {ease: 'expo.out'}});
+
+    tl.set(content, {autoAlpha: 0, y: 60})
+      .set(words, {yPercent: 110})
+      .set(hero, {scale: 1.15})
+      .set(closeBtn, {scale: 0, rotate: -90})
+      .fromTo(backdrop, {opacity: 0}, {opacity: 1, duration: .8, ease: 'power2.out'}, 0)
+      .fromTo(panel, {yPercent: 100}, {yPercent: 0, duration: 1.1}, 0)
+      .to(words, {yPercent: 0, duration: 1.1, stagger: .06}, .35)
+      .to(content, {autoAlpha: 1, y: 0, duration: 1.1, stagger: .045}, .4)
+      .to(hero, {scale: 1, duration: 1.6}, .45)
+      .to(closeBtn, {scale: 1, rotate: 0, duration: .8, ease: 'back.out(1.7)'}, .6);
+
+    closeBtn.focus({preventScroll: true});
+  }
+
+  function closeModal() {
+    if (!isOpen) return;
+    isOpen = false;
+
+    if (tl) tl.kill();
+    tl = gsap.timeline({
+      onComplete() {
+        modal.setAttribute('data-case-modal-status', 'closed');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    tl.to(closeBtn, {scale: 0, rotate: 90, duration: .3, ease: 'power2.in'}, 0)
+      .to(getStaggerTargets().slice(0, 6), {autoAlpha: 0, y: -20, duration: .3, stagger: .03, ease: 'power2.in'}, 0)
+      .to(panel, {yPercent: 100, duration: .7, ease: 'expo.in'}, .1)
+      .to(backdrop, {opacity: 0, duration: .5, ease: 'power2.inOut'}, .35);
+
+    if (lastFocus) lastFocus.focus({preventScroll: true});
+  }
+
+  function getStaggerTargets() {
+    return Array.from(modal.querySelectorAll(
+      '.case-modal__eyebrow, [data-case-reveal], .case-modal__meta > div, .case-modal__section, .case-modal__placeholder'
+    ));
+  }
+
+  modal.querySelectorAll('[data-case-modal-close]').forEach((el) => {
+    el.addEventListener('click', closeModal);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.getAttribute('data-case-modal-status') === 'open') closeModal();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initCaseModal);
+</script>
+</body>
+</html>
